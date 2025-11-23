@@ -61,8 +61,9 @@ void setup_proc(uint64_t r, uint64_t k0, uint64_t k1, uint64_t k2, uint64_t f)
     }
 
     // Read instructions into vector instead of linked list
-    while(std::cin >> n.pc >> n.fu >> n.dest >> n.source1 >> n.source2)
+    while(std::cin >> std::hex >> n.pc >> std::dec >> n.fu >> n.dest >> n.source1 >> n.source2)
     {
+        if(n.fu == -1) n.fu = 1;
         instructions.push_back(n);
     }
 }
@@ -78,7 +79,7 @@ void setup_proc(uint64_t r, uint64_t k0, uint64_t k1, uint64_t k2, uint64_t f)
 
  void fetch()
  {
-    for(uint64_t i = 0; i < g_f && f_tracker < instructions.size() && q.size() < g_rs; ++i)
+    for(uint64_t i = 0; i < g_f && f_tracker < instructions.size(); ++i)
     {
         q.push_back(instructions[f_tracker]);
         f_tracker++;
@@ -100,26 +101,39 @@ void dispatch()
 
 void schedule()
 {
-    Node* dummy = new Node();
-
-    Node* curr = dummy;
+    Node* tail = nullptr;
+    if(head != nullptr)
+    {
+        tail = head;
+        while(tail->next != nullptr)
+        {
+            tail = tail->next;
+        }
+    }
 
     while(!d_q.empty() && g_cnt < g_rs)
     {
         dis_instr c_int = d_q.front();
         Node* next = new Node(nullptr, c_int.instruction, c_int.tag);
+        
         if(c_int.instruction.dest != -1)
         {
-            //1 is the busy value
             g_reg[c_int.instruction.dest] = 1;
         }
-        curr->next = next;
-        curr = curr->next;
+
+        if(head == nullptr)
+        {
+            head = next;
+        }
+        else
+        {
+            tail->next = next;
+        }
+        tail = next;
+
         d_q.pop_front();
         g_cnt++;
     }
-
-    head = dummy->next;
 };
 
 void remove(Node* node)
@@ -154,7 +168,6 @@ void execute()
                     executed = true;
                 }
                 break;
-            case -1:
             case 1:
                 if (gfu[1] == 0)
                 {
@@ -193,6 +206,12 @@ void retire()
         for(int32_t i = 0; i < g_r; ++i)
         {
             n_retire r_inst = r_q.top();
+
+            if(r_inst.cycle >= g_cycle)
+            {
+                break;
+            }
+
             r_q.pop();
 
             if(r_inst.instruction.dest != -1)
@@ -207,13 +226,14 @@ void retire()
 void run_proc(proc_stats_t* p_stats)
 {
     // Keep cycling until all instructions are fetched and processed
-    while(f_tracker < instructions.size() || !q.empty() || !d_q.empty())
+    while(f_tracker < instructions.size() || !q.empty() || !d_q.empty() ||
+          g_cnt > 0 || !r_q.empty())
     {
-        fetch();    
-        dispatch();
-        schedule();
-        execute();
         retire();
+        execute();
+        schedule();
+        dispatch();
+        fetch();    
     }
     
     p_stats->cycle_count = g_cycle;
