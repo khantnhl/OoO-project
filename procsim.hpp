@@ -90,6 +90,9 @@ extern std::priority_queue<n_retire, std::vector<n_retire>, std::greater<n_retir
 extern std::vector<instr> instructions;
 extern size_t f_tracker;
 extern Node* head;
+extern uint64_t g_disp_size_sum;
+extern uint64_t g_max_disp_size;
+extern uint64_t g_fired_sum;
 
 bool read_instruction(proc_inst_t* p_inst);
 void setup_proc(uint64_t r, uint64_t k0, uint64_t k1, uint64_t k2, uint64_t f);

@@ -19,6 +19,9 @@ std::priority_queue<n_retire, std::vector<n_retire>, std::greater<n_retire>> r_q
 std::vector<instr> instructions;
 size_t f_tracker = 0;
 Node* head = nullptr;
+uint64_t g_disp_size_sum = 0;
+uint64_t g_max_disp_size = 0;
+uint64_t g_fired_sum = 0;
 
 /**
  * Subroutine for initializing the processor. You many add and initialize any global or heap
@@ -48,6 +51,10 @@ void setup_proc(uint64_t r, uint64_t k0, uint64_t k1, uint64_t k2, uint64_t f)
     g_cycle = 0;
 
     g_rs = 2 * (k0 + k1 + k2);
+
+    g_disp_size_sum = 0;
+    g_max_disp_size = 0;
+    g_fired_sum = 0;
 
     for(int32_t i = 0; i < 128; ++i)
     {
@@ -162,6 +169,8 @@ void execute()
 
     g_cycle++;
 
+    uint64_t fired_this_cycle = 0;
+
     while (curr)
     {
         bool executed = false;
@@ -187,6 +196,7 @@ void execute()
                     {
                         gfu[0]++;
                         executed = true;
+                        fired_this_cycle++;
                     }
                     break;
                 case 1:
@@ -194,6 +204,7 @@ void execute()
                     {
                         gfu[1]++;
                         executed = true;
+                        fired_this_cycle++;
                     }
                     break;
                 case 2:
@@ -201,6 +212,7 @@ void execute()
                     {
                         gfu[2]++;
                         executed = true;
+                        fired_this_cycle++;
                     }
                     break;
             }
@@ -235,6 +247,8 @@ void execute()
     {
         gfu[i] = 0;
     }
+
+    g_fired_sum += fired_this_cycle;
 };
 
 void retire()
@@ -275,6 +289,12 @@ void run_proc(proc_stats_t* p_stats)
         schedule();
         dispatch();
         fetch();
+
+        // Track dispatch queue statistics
+        g_disp_size_sum += d_q.size();
+        if (d_q.size() > g_max_disp_size) {
+            g_max_disp_size = d_q.size();
+        }
     }
 
     p_stats->cycle_count = g_cycle;
@@ -290,8 +310,29 @@ void run_proc(proc_stats_t* p_stats)
  */
 
 
-void complete_proc(proc_stats_t *p_stats) 
+void complete_proc(proc_stats_t *p_stats)
 {
+    // Calculate average dispatch queue size
+    if (g_cycle > 0) {
+        p_stats->avg_disp_size = (float)g_disp_size_sum / (float)g_cycle;
+    } else {
+        p_stats->avg_disp_size = 0.0f;
+    }
 
+    // Set maximum dispatch queue size
+    p_stats->max_disp_size = g_max_disp_size;
 
+    // Calculate average instructions fired per cycle
+    if (g_cycle > 0) {
+        p_stats->avg_inst_fired = (float)g_fired_sum / (float)g_cycle;
+    } else {
+        p_stats->avg_inst_fired = 0.0f;
+    }
+
+    // Calculate average instructions retired per cycle (IPC)
+    if (g_cycle > 0) {
+        p_stats->avg_inst_retired = (float)g_ret / (float)g_cycle;
+    } else {
+        p_stats->avg_inst_retired = 0.0f;
+    }
 }
