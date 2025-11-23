@@ -61,10 +61,15 @@ void setup_proc(uint64_t r, uint64_t k0, uint64_t k1, uint64_t k2, uint64_t f)
         g_reg[i] = 0;
     }
 
-    // Read instructions into vector - FIX: need hex parsing for addresses
+    for(int32_t i = 0; i < 3; ++i)
+    {
+        gfu[i] = 0;
+    }
+
+    // FIX: Read hex addresses correctly
     while(std::cin >> std::hex >> n.pc >> std::dec >> n.fu >> n.dest >> n.source1 >> n.source2)
     {
-        // Handle FU type -1 -> use FU type 1
+        // FIX: Convert FU type -1 to 1
         if(n.fu == -1) n.fu = 1;
         instructions.push_back(n);
     }
@@ -80,6 +85,7 @@ void setup_proc(uint64_t r, uint64_t k0, uint64_t k1, uint64_t k2, uint64_t f)
 
 void fetch()
 {
+    // FIX: Remove q.size() < g_rs limit (dispatch queue is unlimited)
     for(uint64_t i = 0; i < g_f && f_tracker < instructions.size(); ++i)
     {
         q.push_back(instructions[f_tracker]);
@@ -101,8 +107,7 @@ void dispatch()
 
 void schedule()
 {
-    // FIX: Need to APPEND to existing list, not create new one
-    // Find the tail of the current list
+    // FIX: APPEND to existing list instead of recreating it
     Node* tail = nullptr;
     if(head != nullptr)
     {
@@ -113,11 +118,10 @@ void schedule()
         }
     }
 
-    // Add new entries from dispatch queue
     while(!d_q.empty() && g_cnt < g_rs)
     {
         dis_instr c_int = d_q.front();
-        Node* next = new Node(nullptr, c_int.instruction, c_int.tag, g_cycle);
+        Node* next = new Node(nullptr, c_int.instruction, c_int.tag);
 
         if(c_int.instruction.dest != -1)
         {
@@ -128,42 +132,44 @@ void schedule()
         if(head == nullptr)
         {
             head = next;
-            tail = next;
         }
         else
         {
             tail->next = next;
-            tail = next;
         }
+        tail = next;
 
         d_q.pop_front();
         g_cnt++;
     }
 }
 
+void remove(Node* node)
+{
+    if (node != nullptr && node->next != nullptr)
+    {
+        Node* temp = node->next;
+        node->instruction = temp->instruction;
+        node->tag = temp->tag;
+        node->next = temp->next;
+        g_cnt--;
+        delete temp;
+    }
+}
+
 void execute()
 {
     Node* curr = head;
+    Node* prev = nullptr;
 
-    // FIX: Need to check dependencies before executing
+    g_cycle++;
+
     while (curr)
     {
-        bool can_execute = false;
+        bool executed = false;
         int fu_type = curr->instruction.fu;
 
-        // Skip if already fired
-        if(curr->fired) {
-            curr = curr->next;
-            continue;
-        }
-
-        // Instruction must spend at least 1 cycle in schedule queue
-        if(curr->schedule_cycle >= g_cycle) {
-            curr = curr->next;
-            continue;
-        }
-
-        // Check if source registers are ready
+        // FIX: Check source register dependencies
         bool src1_ready = (curr->instruction.source1 == -1) ||
                           (curr->instruction.source1 == curr->instruction.dest) ||
                           (g_reg[curr->instruction.source1] == 0);
@@ -173,50 +179,64 @@ void execute()
 
         if(!src1_ready || !src2_ready)
         {
+            prev = curr;
             curr = curr->next;
             continue;
         }
 
-        // Check if FU is available
+        // FIX: Support multiple FUs per type
         switch (fu_type)
         {
             case 0:
                 if (gfu[0] < g_k0)
                 {
                     gfu[0]++;
-                    can_execute = true;
+                    executed = true;
                 }
                 break;
             case 1:
                 if (gfu[1] < g_k1)
                 {
                     gfu[1]++;
-                    can_execute = true;
+                    executed = true;
                 }
                 break;
             case 2:
                 if (gfu[2] < g_k2)
                 {
                     gfu[2]++;
-                    can_execute = true;
+                    executed = true;
                 }
                 break;
         }
 
-        if (can_execute)
+        if (executed)
         {
-            // Mark as fired and add to retire queue
-            // But DON'T remove from schedule queue yet!
-            curr->fired = true;
-            curr->fire_cycle = g_cycle;
             r_q.push({g_cycle, curr->tag, curr->instruction});
             total_fired++;
-        }
 
-        curr = curr->next;
+            // Remove node from list
+            Node* to_delete = curr;
+            if(prev == nullptr)
+            {
+                head = curr->next;
+                curr = head;
+            }
+            else
+            {
+                prev->next = curr->next;
+                curr = curr->next;
+            }
+            delete to_delete;
+            g_cnt--;
+        }
+        else
+        {
+            prev = curr;
+            curr = curr->next;
+        }
     }
 
-    // Reset FU counters for next cycle
     for(uint32_t i = 0; i < 3; ++i)
     {
         gfu[i] = 0;
@@ -231,43 +251,17 @@ void retire()
     {
         n_retire r_inst = r_q.top();
 
-        // Only retire if execution completed (cycle has passed)
+        // Only retire if execution completed
         if(r_inst.cycle >= g_cycle)
         {
-            break;  // Not ready yet
+            break;
         }
 
         r_q.pop();
 
-        // Free the register
         if(r_inst.instruction.dest != -1)
         {
             g_reg[r_inst.instruction.dest] = 0;
-        }
-
-        // Remove from schedule queue (linked list)
-        Node* curr = head;
-        Node* prev = nullptr;
-        while(curr != nullptr)
-        {
-            if(curr->tag == r_inst.tag)
-            {
-                // Found the instruction to remove
-                if(prev == nullptr)
-                {
-                    // Removing head
-                    head = curr->next;
-                }
-                else
-                {
-                    prev->next = curr->next;
-                }
-                delete curr;
-                g_cnt--;
-                break;
-            }
-            prev = curr;
-            curr = curr->next;
         }
 
         g_ret++;
@@ -279,25 +273,23 @@ void run_proc(proc_stats_t* p_stats)
 {
     uint64_t max_disp_size = 0;
 
-    // FIX: Keep cycling until all instructions are fetched and processed
+    // FIX: Check ALL pipeline stages
     while(f_tracker < instructions.size() || !q.empty() || !d_q.empty() ||
           g_cnt > 0 || !r_q.empty())
     {
-        g_cycle++;  // Increment cycle counter at start of each cycle
-
-        // Track dispatch queue size for statistics
+        // Track statistics
         total_disp_size += d_q.size();
         if(d_q.size() > max_disp_size)
         {
             max_disp_size = d_q.size();
         }
 
-        // Execute stages in REVERSE order (spec requirement)
-        retire();     // Retire completed instructions
-        execute();    // Execute ready instructions
-        schedule();   // Schedule to reservation station
-        dispatch();   // Dispatch fetched instructions
-        fetch();      // Fetch new instructions each cycle
+        // FIX: Execute in REVERSE order
+        retire();
+        execute();
+        schedule();
+        dispatch();
+        fetch();
     }
 
     p_stats->cycle_count = g_cycle;
@@ -325,7 +317,8 @@ void run_proc(proc_stats_t* p_stats)
  *
  * @p_stats Pointer to the statistics structure
  */
+
 void complete_proc(proc_stats_t *p_stats)
 {
-    // Nothing additional needed
+    // Nothing needed
 }

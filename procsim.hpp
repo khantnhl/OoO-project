@@ -64,12 +64,9 @@ class Node {
         Node* next;
         instr instruction;
         uint64_t tag;
-        uint64_t schedule_cycle;  // Cycle when entered schedule queue
-        bool fired;  // Has this instruction been fired/executed?
-        uint64_t fire_cycle;  // Cycle when fired
 
-        Node(Node* next = nullptr, instr instruction = {-1, -1, -1, -1, -1}, uint64_t tag = 1, uint64_t sc = 0)
-            : next(next), instruction(instruction), tag(tag), schedule_cycle(sc), fired(false), fire_cycle(0) {}
+        Node(Node* next = nullptr, instr instruction = {-1, -1, -1, -1, -1}, uint64_t tag = 1)
+            : next(next), instruction(instruction), tag(tag) {}
 };
 
 extern int32_t gfu[3];
