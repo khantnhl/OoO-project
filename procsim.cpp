@@ -55,6 +55,11 @@ void setup_proc(uint64_t r, uint64_t k0, uint64_t k1, uint64_t k2, uint64_t f)
         g_reg[i] = 0;
     }
 
+    for(int32_t i = 0; i < 3; ++i)
+    {
+        gfu[i] = 0;
+    }
+
     // Read instructions into vector instead of linked list
     while(std::cin >> n.pc >> n.fu >> n.dest >> n.source1 >> n.source2)
     {
@@ -204,8 +209,8 @@ void run_proc(proc_stats_t* p_stats)
     // Keep cycling until all instructions are fetched and processed
     while(f_tracker < instructions.size() || !q.empty() || !d_q.empty())
     {
-        fetch();      // Fetch new instructions each cycle
-        dispatch();   // Dispatch fetched instructions
+        fetch();    
+        dispatch();
         schedule();
         execute();
         retire();
