@@ -64,9 +64,12 @@ class Node {
         Node* next;
         instr instruction;
         uint64_t tag;
+        bool src1_ready;
+        bool src2_ready;
 
-        Node(Node* next = nullptr, instr instruction = {-1, -1, -1, -1, -1}, uint64_t tag = 1)
-            : next(next), instruction(instruction), tag(tag) {}
+        Node(Node* next = nullptr, instr instruction = {-1, -1, -1, -1, -1}, uint64_t tag = 1,
+             bool src1_ready = true, bool src2_ready = true)
+            : next(next), instruction(instruction), tag(tag), src1_ready(src1_ready), src2_ready(src2_ready) {}
 };
 
 extern int32_t gfu[3];

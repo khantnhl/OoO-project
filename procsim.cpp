@@ -114,8 +114,14 @@ void schedule()
     while(!d_q.empty() && g_cnt < g_rs)
     {
         dis_instr c_int = d_q.front();
-        Node* next = new Node(nullptr, c_int.instruction, c_int.tag);
-        
+
+        // Capture source readiness BEFORE marking destination as busy
+        bool src1_ready = (c_int.instruction.source1 == -1 || g_reg[c_int.instruction.source1] == 0);
+        bool src2_ready = (c_int.instruction.source2 == -1 || g_reg[c_int.instruction.source2] == 0);
+
+        Node* next = new Node(nullptr, c_int.instruction, c_int.tag, src1_ready, src2_ready);
+
+        // NOW mark destination as busy (after capturing source status)
         if(c_int.instruction.dest != -1)
         {
             g_reg[c_int.instruction.dest] = 1;
@@ -152,6 +158,7 @@ void remove(Node* node)
 void execute()
 {
     Node* curr = head;
+    Node* prev = nullptr;
 
     g_cycle++;
 
@@ -159,9 +166,16 @@ void execute()
     {
         bool executed = false;
 
-        // Check if both source registers are ready (not busy)
-        bool sources_ready = (curr->instruction.source1 == -1 || g_reg[curr->instruction.source1] == 0) &&
-                             (curr->instruction.source2 == -1 || g_reg[curr->instruction.source2] == 0);
+        // Update source readiness: ready if was ready at schedule time OR has become ready since
+        if (!curr->src1_ready && (curr->instruction.source1 == -1 || g_reg[curr->instruction.source1] == 0)) {
+            curr->src1_ready = true;
+        }
+        if (!curr->src2_ready && (curr->instruction.source2 == -1 || g_reg[curr->instruction.source2] == 0)) {
+            curr->src2_ready = true;
+        }
+
+        // Check if both source registers are ready
+        bool sources_ready = curr->src1_ready && curr->src2_ready;
 
         // Only execute if sources are ready and functional unit is available
         if (sources_ready)
@@ -195,10 +209,24 @@ void execute()
         if (executed)
         {
             r_q.push({g_cycle, curr->tag, curr->instruction});
-            remove(curr);
+
+            // Remove node from list
+            Node* to_delete = curr;
+            if (prev == nullptr) {
+                // Removing head
+                head = curr->next;
+                curr = curr->next;
+            } else {
+                // Removing non-head node
+                prev->next = curr->next;
+                curr = curr->next;
+            }
+            delete to_delete;
+            g_cnt--;
         }
         else
         {
+            prev = curr;
             curr = curr->next;
         }
     }
@@ -246,9 +274,9 @@ void run_proc(proc_stats_t* p_stats)
         execute();
         schedule();
         dispatch();
-        fetch();    
+        fetch();
     }
-    
+
     p_stats->cycle_count = g_cycle;
     p_stats->retired_instruction = g_ret;
 }
