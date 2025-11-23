@@ -154,36 +154,44 @@ void execute()
     Node* curr = head;
 
     g_cycle++;
-    
+
     while (curr)
     {
         bool executed = false;
-        
-        switch (curr->instruction.fu)
+
+        // Check if both source registers are ready (not busy)
+        bool sources_ready = (curr->instruction.source1 == -1 || g_reg[curr->instruction.source1] == 0) &&
+                             (curr->instruction.source2 == -1 || g_reg[curr->instruction.source2] == 0);
+
+        // Only execute if sources are ready and functional unit is available
+        if (sources_ready)
         {
-            case 0:
-                if (gfu[0] == 0)
-                {
-                    gfu[0]++;
-                    executed = true;
-                }
-                break;
-            case 1:
-                if (gfu[1] == 0)
-                {
-                    gfu[1]++;
-                    executed = true;
-                }
-                break;
-            case 2:
-                if (gfu[2] == 0)
-                {
-                    gfu[2]++;
-                    executed = true;
-                }
-                break;
+            switch (curr->instruction.fu)
+            {
+                case 0:
+                    if (gfu[0] < g_k0)
+                    {
+                        gfu[0]++;
+                        executed = true;
+                    }
+                    break;
+                case 1:
+                    if (gfu[1] < g_k1)
+                    {
+                        gfu[1]++;
+                        executed = true;
+                    }
+                    break;
+                case 2:
+                    if (gfu[2] < g_k2)
+                    {
+                        gfu[2]++;
+                        executed = true;
+                    }
+                    break;
+            }
         }
-        
+
         if (executed)
         {
             r_q.push({g_cycle, curr->tag, curr->instruction});
@@ -202,9 +210,14 @@ void execute()
 };
 
 void retire()
-    {   
+    {
         for(int32_t i = 0; i < g_r; ++i)
         {
+            if(r_q.empty())
+            {
+                continue;
+            }
+
             n_retire r_inst = r_q.top();
 
             if(r_inst.cycle >= g_cycle)
@@ -218,7 +231,7 @@ void retire()
             {
                 g_reg[r_inst.instruction.dest] = 0;
             }
-            
+
             g_ret++;
         }
     };
