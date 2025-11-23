@@ -64,9 +64,10 @@ class Node {
         Node* next;
         instr instruction;
         uint64_t tag;
+        uint64_t schedule_cycle;  // Cycle when entered schedule queue
 
-        Node(Node* next = nullptr, instr instruction = {-1, -1, -1, -1, -1}, uint64_t tag = 1)
-            : next(next), instruction(instruction), tag(tag) {}
+        Node(Node* next = nullptr, instr instruction = {-1, -1, -1, -1, -1}, uint64_t tag = 1, uint64_t sc = 0)
+            : next(next), instruction(instruction), tag(tag), schedule_cycle(sc) {}
 };
 
 extern int32_t gfu[3];

@@ -117,7 +117,7 @@ void schedule()
     while(!d_q.empty() && g_cnt < g_rs)
     {
         dis_instr c_int = d_q.front();
-        Node* next = new Node(nullptr, c_int.instruction, c_int.tag);
+        Node* next = new Node(nullptr, c_int.instruction, c_int.tag, g_cycle);
 
         if(c_int.instruction.dest != -1)
         {
@@ -146,13 +146,18 @@ void execute()
     Node* curr = head;
     Node* prev = nullptr;
 
-    g_cycle++;
-
     // FIX: Need to check dependencies before executing
     while (curr)
     {
         bool can_execute = false;
         int fu_type = curr->instruction.fu;
+
+        // Instruction must spend at least 1 cycle in schedule queue
+        if(curr->schedule_cycle >= g_cycle) {
+            prev = curr;
+            curr = curr->next;
+            continue;
+        }
 
         // Check if source registers are ready
         bool src1_ready = (curr->instruction.source1 == -1) ||
@@ -264,6 +269,8 @@ void run_proc(proc_stats_t* p_stats)
     while(f_tracker < instructions.size() || !q.empty() || !d_q.empty() ||
           g_cnt > 0 || !r_q.empty())
     {
+        g_cycle++;  // Increment cycle counter at start of each cycle
+
         // Track dispatch queue size for statistics
         total_disp_size += d_q.size();
         if(d_q.size() > max_disp_size)
@@ -271,11 +278,12 @@ void run_proc(proc_stats_t* p_stats)
             max_disp_size = d_q.size();
         }
 
-        fetch();      // Fetch new instructions each cycle
-        dispatch();   // Dispatch fetched instructions
-        schedule();   // Schedule to reservation station
-        execute();    // Execute ready instructions
+        // Execute stages in REVERSE order (spec requirement)
         retire();     // Retire completed instructions
+        execute();    // Execute ready instructions
+        schedule();   // Schedule to reservation station
+        dispatch();   // Dispatch fetched instructions
+        fetch();      // Fetch new instructions each cycle
     }
 
     p_stats->cycle_count = g_cycle;
