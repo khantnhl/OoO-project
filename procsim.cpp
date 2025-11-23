@@ -144,7 +144,6 @@ void schedule()
 void execute()
 {
     Node* curr = head;
-    Node* prev = nullptr;
 
     // FIX: Need to check dependencies before executing
     while (curr)
@@ -152,9 +151,14 @@ void execute()
         bool can_execute = false;
         int fu_type = curr->instruction.fu;
 
+        // Skip if already fired
+        if(curr->fired) {
+            curr = curr->next;
+            continue;
+        }
+
         // Instruction must spend at least 1 cycle in schedule queue
         if(curr->schedule_cycle >= g_cycle) {
-            prev = curr;
             curr = curr->next;
             continue;
         }
@@ -169,7 +173,6 @@ void execute()
 
         if(!src1_ready || !src2_ready)
         {
-            prev = curr;
             curr = curr->next;
             continue;
         }
@@ -202,30 +205,15 @@ void execute()
 
         if (can_execute)
         {
+            // Mark as fired and add to retire queue
+            // But DON'T remove from schedule queue yet!
+            curr->fired = true;
+            curr->fire_cycle = g_cycle;
             r_q.push({g_cycle, curr->tag, curr->instruction});
             total_fired++;
+        }
 
-            // Remove this node from the list
-            Node* to_delete = curr;
-            if(prev == nullptr)
-            {
-                // Removing head
-                head = curr->next;
-                curr = head;
-            }
-            else
-            {
-                prev->next = curr->next;
-                curr = curr->next;
-            }
-            delete to_delete;
-            g_cnt--;
-        }
-        else
-        {
-            prev = curr;
-            curr = curr->next;
-        }
+        curr = curr->next;
     }
 
     // Reset FU counters for next cycle
@@ -251,9 +239,35 @@ void retire()
 
         r_q.pop();
 
+        // Free the register
         if(r_inst.instruction.dest != -1)
         {
             g_reg[r_inst.instruction.dest] = 0;
+        }
+
+        // Remove from schedule queue (linked list)
+        Node* curr = head;
+        Node* prev = nullptr;
+        while(curr != nullptr)
+        {
+            if(curr->tag == r_inst.tag)
+            {
+                // Found the instruction to remove
+                if(prev == nullptr)
+                {
+                    // Removing head
+                    head = curr->next;
+                }
+                else
+                {
+                    prev->next = curr->next;
+                }
+                delete curr;
+                g_cnt--;
+                break;
+            }
+            prev = curr;
+            curr = curr->next;
         }
 
         g_ret++;
